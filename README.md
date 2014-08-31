@@ -1,4 +1,4 @@
-fhemduino_modules
+fhemduino_modules - Trunk revision
 =================
 
 These are the perl files needed, to extend an existing fhem installation with support for the fhemduino.
