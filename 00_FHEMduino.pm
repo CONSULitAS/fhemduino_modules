@@ -1,5 +1,6 @@
 ##############################################
-# $Id: 00_FHEMduino.pm mdorenka $
+# $Id: 00_FHEMduino.pm 0001 2014-11-19 15:50:00Z mdorenka $
+
 package main;
 
 use strict;
@@ -198,7 +199,7 @@ FHEMduino_Set($@)
     my $hexFile = "";
     my @deviceName = split('@', $hash->{DeviceName});
     my $port = $deviceName[0];
-    my $defaultHexFile = "./hexfiles/$hash->{TYPE}.hex";
+    my $defaultHexFile = "./FHEM/firmware/$hash->{TYPE}.hex";
     my $logFile = AttrVal("global", "logdir", "./log/") . "$hash->{TYPE}-Flash.log";
 
     if(!$arg || $args[0] !~ m/^(\w|\/|.)+$/) {
@@ -409,6 +410,7 @@ FHEMduino_ReadAnswer($$$$)
   my ($hash, $arg, $anydata, $regexp) = @_;
   my $type = $hash->{TYPE};
 
+  # find out if an FHEMduino_RFR (Radio Frequency Router) exist
   while($hash->{TYPE} eq "FHEMduino_RFR") {   # Look for the first "real" FHEMduino
     $hash = $hash->{IODev};
   }
@@ -452,6 +454,7 @@ FHEMduino_ReadAnswer($$$$)
       Log3 $hash->{NAME}, 5, "FHEMduino/RAW (ReadAnswer): $buf";
       $mFHEMduinodata .= $buf;
     }
+
     $mFHEMduinodata = FHEMduino_RFR_DelPrefix($mFHEMduinodata) if($type eq "FHEMduino_RFR");
 
     # \n\n is socat special
@@ -507,7 +510,7 @@ FHEMduino_Write($$$)
 
   my $name = $hash->{NAME};
 
-  Log3 $name, 5, "$hash->{NAME} sending $fn$msg";
+  Log3 $name, 4, "$hash->{NAME} sending $fn$msg";
   my $bstring = "$fn$msg";
 
   FHEMduino_SimpleWrite($hash, $bstring);
@@ -700,16 +703,18 @@ sub
 FHEMduino_SimpleWrite(@)
 {
   my ($hash, $msg, $nonl) = @_;
+
   return if(!$hash);
+
   if($hash->{TYPE} eq "FHEMduino_RFR") {
     # Prefix $msg with RRBBU and return the corresponding FHEMduino hash.
     ($hash, $msg) = FHEMduino_RFR_AddPrefix($hash, $msg); 
   }
 
   my $name = $hash->{NAME};
-  Log3 $name, 5, "SW: $msg";
-
   $msg .= "\n" unless($nonl);
+
+#  IOWrite($hash, "", $msg);
 
   $hash->{USBDev}->write($msg)    if($hash->{USBDev});
   syswrite($hash->{TCPDev}, $msg) if($hash->{TCPDev});
@@ -738,7 +743,7 @@ FHEMduino_Attr(@)
 
   <table>
   <tr><td>
-  The FHEMduino ia based on an idea from mdorenka published at <a
+  The FHEMduino is based on an idea from mdorenka published at <a
   href="http://forum.fhem.de/index.php/topic,17196.0.html">FHEM Forum</a>.
 
   With the opensource firmware (see this <a
@@ -888,4 +893,162 @@ FHEMduino_Attr(@)
 </ul>
 
 =end html
+=begin html_DE
+
+<a name="FHEMduino"></a>
+<h3>FHEMduino</h3>
+<ul>
+
+  <table>
+  <tr><td>
+  FHEMduino auf einer Idee von mdorenka die er auf <a
+  href="http://forum.fhem.de/index.php/topic,17196.0.html">FHEM Forum</a> veröffentlicht hat.
+
+  Mit dieser Open Source Firmware (see this <a
+  href="https://github.com/mdorenka">link</a>) they are capable
+  to receive and send different 433MHz protocols.
+  <br><br>
+  
+  The following protocols are available:
+  <br><br>
+  
+  Date / Time protocol  <br>
+  DCF-77 --> 14_FHEMduino_DCF77.pm <br>
+  <br><br>
+  
+  Wireless switches  <br>
+  PT2262 (IT / ELRO switches) --> 14_FHEMduino_PT2262.pm <br>
+  <br><br>
+  
+  Smoke detector   <br>
+  Flamingo FA20RF / ELRO RM150RF  --> 14_FHEMduino_FA20RF.pm<br>
+  <br><br>
+  
+  Door bells   <br>
+  Heidemann HX Series --> 14_FHEMduino_HX.pm<br>
+  Tchibo TCM --> 14_FHEMduino_TCM.pm<br>
+  <br><br>
+
+  Temperatur / humidity sensors  <br>
+  KW9010  --> 14_FHEMduino_Env.pm<br>
+  PEARL NC7159, LogiLink WS0002  --> 14_FHEMduino_Env.pm<br>
+  EUROCHRON / Tchibo  --> 14_FHEMduino_Env.pm<br>
+  LIFETEC  --> 14_FHEMduino_Env.pm<br>
+  TX70DTH  --> 14_FHEMduino_Env.pm<br>
+  AURIOL   --> 14_FHEMduino_Env.pm<br>
+  Intertechno TX2/3/4  --> CUL_TX.pm<br>
+  <br><br>
+
+  It is possible to attach more than one device in order to get better
+  reception, fhem will filter out duplicate messages.<br><br>
+
+  Note: this module may require the Device::SerialPort or Win32::SerialPort
+  module if you attach the device via USB and the OS sets strange default
+  parameters for serial devices.
+
+  </td><td>
+  <img src="ccc.jpg"/>
+  </td></tr>
+  </table>
+
+  <a name="FHEMduinodefine"></a>
+  <b>Define</b>
+  <ul>
+    <code>define &lt;name&gt; FHEMduino &lt;device&gt; &lt;FHTID&gt;</code> <br>
+    <br>
+    USB-connected devices (FHEMduino/CUR/CUN):<br><ul>
+      &lt;device&gt; specifies the serial port to communicate with the FHEMduino.
+	  The name of the serial-device depends on your distribution, under
+      linux the cdc_acm kernel module is responsible, and usually a
+      /dev/ttyACM0 device will be created. If your distribution does not have a
+      cdc_acm module, you can force usbserial to handle the FHEMduino by the
+      following command:<ul>modprobe usbserial vendor=0x03eb
+      product=0x204b</ul>In this case the device is most probably
+      /dev/ttyUSB0.<br><br>
+
+      You can also specify a baudrate if the device name contains the @
+      character, e.g.: /dev/ttyACM0@38400<br><br>
+
+      If the baudrate is "directio" (e.g.: /dev/ttyACM0@directio), then the
+      perl module Device::SerialPort is not needed, and fhem opens the device
+      with simple file io. This might work if the operating system uses sane
+      defaults for the serial parameters, e.g. some Linux distributions and
+      OSX.  <br><br>
+
+  </ul>
+  <br>
+
+  <a name="FHEMduinoset"></a>
+  <b>Set </b>
+  <ul>
+    <li>raw<br>
+        Issue a FHEMduino firmware command.  See the <a
+        href="http://FHEMduinofw.de/commandref.html">this</a> document
+        for details on FHEMduino commands.
+    </li><br>
+
+    <li>flash [hexFile]<br>
+    The JeeLink needs the right firmware to be able to receive and deliver the sensor data to fhem. In addition to the way using the
+    arduino IDE to flash the firmware into the JeeLink this provides a way to flash it directly from FHEM.
+
+    There are some requirements:
+    <ul>
+      <li>avrdude must be installed on the host<br>
+      On a Raspberry PI this can be done with: sudo apt-get install avrdude</li>
+      <li>the flashCommand attribute must be set.<br>
+        This attribute defines the command, that gets sent to avrdude to flash the JeeLink.<br>
+        The default is: avrdude -p atmega328P -c arduino -P [PORT] -D -U flash:w:[HEXFILE] 2>[LOGFILE]<br>
+        It contains some place-holders that automatically get filled with the according values:<br>
+        <ul>
+          <li>[PORT]<br>
+            is the port the JeeLink is connectd to (e.g. /dev/ttyUSB0)</li>
+          <li>[HEXFILE]<br>
+            is the .hex file that shall get flashed. There are three options (applied in this order):<br>
+            - passed in set flash<br>
+            - taken from the hexFile attribute<br>
+            - the default value defined in the module<br>
+          </li>
+          <li>[LOGFILE]<br>
+            The logfile that collects information about the flash process. It gets displayed in FHEM after finishing the flash process</li>
+        </ul>
+      </li>
+    </ul>
+    </li><br>
+
+    <li>led &lt;on|off&gt;<br>
+    Is used to disable the blue activity LED
+    </li><br>
+
+  </ul>
+  <a name="FHEMduinoget"></a>
+  <b>Get</b>
+  <ul>
+    <li>version<br>
+        return the FHEMduino firmware version
+        </li><br>
+    <li>raw<br>
+        Issue a FHEMduino firmware command, and wait for one line of data returned by
+        the FHEMduino. See the FHEMduino firmware README document for details on FHEMduino
+        commands.
+        </li><br>
+    <li>cmds<br>
+        Depending on the firmware installed, FHEMduinos have a different set of
+        possible commands. Please refer to the README of the firmware of your
+        FHEMduino to interpret the response of this command. See also the raw-
+        command.
+        </li><br>
+  </ul>
+
+  <a name="FHEMduinoattr"></a>
+  <b>Attributes</b>
+  <ul>
+    <li><a href="#do_not_notify">do_not_notify</a></li>
+    <li><a href="#attrdummy">dummy</a></li>
+    <li><a href="#showtime">showtime</a></li>
+    <li><a href="#model">model</a> (FHEMduino,CUN,CUR)</li>
+  </ul>
+  <br>
+</ul>
+
+=end html_DE
 =cut
