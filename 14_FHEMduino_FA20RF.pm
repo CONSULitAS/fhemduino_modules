@@ -1,5 +1,6 @@
 ##############################################
-# $Id: 14_FHEMduino_FA20RF.pm 3818 2014-06-24 $
+# $Id: 14_FHEMduino_FA20RF.pm 0001 2014-11-19 15:50:00Z jowiemann $
+
 package main;
 
 use strict;
@@ -65,7 +66,7 @@ FHEMduino_FA20RF_Do_On_Till($@)
   my $hms_till = sprintf("%02d:%02d:%02d", $hr, $min, $sec);
   my $hms_now = sprintf("%02d:%02d:%02d", $lt[2], $lt[1], $lt[0]);
   if($hms_now ge $hms_till) {
-    Log 4, "on-till: won't switch as now ($hms_now) is later than $hms_till";
+    Log3 $hash, 4, "on-till: won't switch as now ($hms_now) is later than $hms_till";
     return "";
   }
 
@@ -92,7 +93,7 @@ FHEMduino_FA20RF_On_For_Timer($@)
   my $hms_now = sprintf("%02d:%02d:%02d", $lt[2], $lt[1], $lt[0]);
   
   if($hms_now ge $hms_till) {
-    Log 4, "on-for-timer: won't switch as now ($hms_now) is later than $hms_till";
+    Log3 $hash, 4, "on-for-timer: won't switch as now ($hms_now) is later than $hms_till";
     return "";
   }
 
@@ -116,13 +117,20 @@ FHEMduino_FA20RF_Define($$)
 
   my $name = $a[0];
   my $FA20RFcode = $a[2];
-  my $code = lc($FA20RFcode); 
+  my $code = hex2bin(lc($FA20RFcode)); 
   my $onFA20RF = "";
+  my $footerDur = "14000";
+
+  if (index($a[2], "_") != -1) {
+    ($FA20RFcode, $footerDur) = split m/_/, $a[2], 2;
+  } else {
+    $FA20RFcode = $a[2];
+  }
 
   if(int(@a) == 3) {
   }
-  elsif(int(@a) == 5) {
-    $onFA20RF = $a[3];
+  elsif(int(@a) == 4) {
+    $footerDur = $a[3];
   }
   else {
     return "wrong syntax: define <name> FHEMduino_FA20RF <code>";
@@ -131,14 +139,14 @@ FHEMduino_FA20RF_Define($$)
   Log3 undef, 5, "Arraylenght:  int(@a)";
 
   $hash->{CODE} = $FA20RFcode;
-  $hash->{DEF} = $FA20RFcode . " " . $onFA20RF;
-  $hash->{XMIT} = hex2bin($code);
-  $hash->{BTN}  = hex2bin($code);
+  $hash->{DEF} = $FA20RFcode . " " . $footerDur;
+  $hash->{FDUR} = $footerDur;
+  $hash->{XMIT} = $code;
   
   Log3 $hash, 5, "Define hascode: {$code} {$name}";
   $modules{FHEMduino_FA20RF}{defptr}{$FA20RFcode} = $hash;
-  $hash->{$elro_c2b{"on"}}  = hex2bin($code);
-  $hash->{$elro_c2b{"off"}}  = hex2bin($code);
+  $hash->{$elro_c2b{"on"}}  = $code;
+  $hash->{$elro_c2b{"off"}}  = $code;
   $modules{FHEMduino_FA20RF}{defptr}{$code}{$name} = $hash;
 
   if(!defined $hash->{IODev} ||!defined $hash->{IODev}{NAME}){
@@ -182,77 +190,72 @@ sub FHEMduino_FA20RF_Set($@){ ##################################################
   # return "Bad time spec" if($na == 1 && $a[2] !~ m/^\d*\.?\d+$/);
 
   if(!defined($c)) {
-
-   # Model specific set arguments
-   if(defined($attr{$a[0]}) && defined($attr{$a[0]}{"model"})) {
-     my $mt = $models{$attr{$a[0]}{"model"}};
-     return "Unknown argument $a[1], choose one of "
-     if($mt && $mt eq "sender");
-     return "Unknown argument $a[1], choose one of $fa20rf_simple"
-     if($mt && $mt eq "simple");
-   }
    return "Unknown argument $a[1], choose one of " . join(" ", sort keys %elro_c2b);
- }
- my $io = $hash->{IODev};
+  }
+  my $io = $hash->{IODev};
 
- ## Do we need to change RFMode to SlowRF?? // Not implemented in fhemduino -> see fhemduino.pm
+  ## Do we need to change RFMode to SlowRF?? // Not implemented in fhemduino -> see fhemduino.pm
   if(defined($attr{$a[0]}) && defined($attr{$a[0]}{"switch_rfmode"})) {
-  	if ($attr{$a[0]}{"switch_rfmode"} eq "1") {			# do we need to change RFMode of IODev
+    if ($attr{$a[0]}{"switch_rfmode"} eq "1") {			# do we need to change RFMode of IODev
       my $ret = CallFn($io->{NAME}, "AttrFn", "set", ($io->{NAME}, "rfmode", "SlowRF"));
     }	
   }
 
   ## Do we need to change FA20RFrepetition ??	
   if(defined($attr{$a[0]}) && defined($attr{$a[0]}{"FA20RFrepetition"})) {
-  	$message = "fr".$attr{$a[0]}{"FA20RFrepetition"};
+    $message = "fr".$attr{$a[0]}{"FA20RFrepetition"};
     $msg = CallFn($io->{NAME}, "GetFn", $io, (" ", "raw", $message));
     if ($msg =~ m/raw => $message/) {
- 	  Log GetLogLevel($a[0],4), "FHEMduino_FA20RF: Set FA20RFrepetition: $message for $io->{NAME}";
+ 	  Log3 $hash, 4, "FHEMduino_FA20RF: Set FA20RFrepetition: $message for $io->{NAME}";
     } else {
- 	  Log GetLogLevel($a[0],4), "FHEMduino_FA20RF: Error set FA20RFrepetition: $message for $io->{NAME}";
+ 	  Log3 $hash, 4, "FHEMduino_FA20RF: Error set FA20RFrepetition: $message for $io->{NAME}";
     }
   }
 
   my $v = join(" ", @a);
-  $message = "fs".$hash->{XMIT};
+  $message = "fs".$hash->{XMIT}.$hash->{FDUR};
 
   ## Log that we are going to switch InterTechno
-  Log GetLogLevel($a[0],2), "FHEMduino_FA20RF set $v";
+  Log3 $hash, 3, "FHEMduino_FA20RF set $v";
   (undef, $v) = split(" ", $v, 2);	# Not interested in the name...
 
   ## Send Message to IODev and wait for correct answer
   Log3 $hash, 5, "Messsage an IO senden Message raw: $message";
   $msg = CallFn($io->{NAME}, "GetFn", $io, (" ", "raw", $message));
   if ($msg =~ m/raw => $message/) {
-    Log3 $hash, 5, "FHEMduino_FA20RF: Answer from $io->{NAME}: $msg";
+    Log3 $hash, 4, "FHEMduino_FA20RF: Answer from $io->{NAME}: $msg $message";
   } else {
-    Log3 $hash, 5, "FHEMduino_FA20RF: IODev device didn't answer is command correctly: $msg";
+    Log3 $hash, 4, "FHEMduino_FA20RF: IODev device didn't answer is command correctly: $msg $message";
   }
 
   ## Do we need to change FArepetition back??	
   if(defined($attr{$a[0]}) && defined($attr{$a[0]}{"FA20RFrepetition"})) {
-  	$message = "fr".$fa20rf_defrepetition;
+    $message = "fr".$fa20rf_defrepetition;
     $msg = CallFn($io->{NAME}, "GetFn", $io, (" ", "raw", $message));
     if ($msg =~ m/raw => $message/) {
- 	  Log GetLogLevel($a[0],4), "FHEMduino_FA20RF: Set FA20RFrepetition back: $message for $io->{NAME}";
+ 	  Log3 $hash, 4, "FHEMduino_FA20RF: Set FA20RFrepetition back: $message for $io->{NAME}";
     } else {
- 	  Log GetLogLevel($a[0],4), "FHEMduino_FA20RF: Error FA20RFrepetition back: $message for $io->{NAME}";
+ 	  Log3 $hash, 4, "FHEMduino_FA20RF: Error FA20RFrepetition back: $message for $io->{NAME}";
     }
   }
 
-  # Look for all devices with the same code, and set state, timestamp
   $name = "$hash->{NAME}";
-  my $code = "$hash->{XMIT}";
+
+  ##########################
+  # Look for all devices with the same code, and set state, timestamp
+  my $code = $hash->{XMIT};
   my $tn = TimeNow();
 
-  foreach my $n (keys %{ $modules{FHEMduino_FA20RF}{defptr}{$code} }) {
-    my $lh = $modules{FHEMduino_FA20RF}{defptr}{$code}{$n};
-    $lh->{CHANGED}[0] = $v;
-    $lh->{STATE} = $v;
-    $lh->{READINGS}{state}{TIME} = $tn;
-    $lh->{READINGS}{state}{VAL} = $v;
-    $modules{FHEMduino_FA20RF}{defptr}{$code}{$name}  = $hash;
+  $name = "$hash->{NAME}";
+  Log3 $hash, 5, "$name: RSU: $code";
+
+  my $defptr = $modules{FHEMduino_FA20RF}{defptr}{$code};
+
+  foreach my $n (keys %{ $defptr }) {
+    Log3 $hash, 5, "$name: RSU->: $n";
+    readingsSingleUpdate($defptr->{$n}, "state", $v, 1);
   }
+  
   return $ret;
 }
 
@@ -263,19 +266,26 @@ FHEMduino_FA20RF_Parse($$)
   my ($hash,$msg) = @_;
   my @a = split("", $msg);
 
+  my $footerDur = "";
+  
+  ($msg, $footerDur) = split m/_/, $msg, 2;
+
   my $deviceCode = "";
 
   # output format is "F4d4efd-12128"
   #                   FAAAAAA-mmmmm"
   #                   0123456789ABC
 
-  $deviceCode = $a[1].$a[2].$a[3].$a[4].$a[5].$a[6];
+  # $deviceCode = $a[1].$a[2].$a[3].$a[4].$a[5].$a[6];
+  $deviceCode = $msg;
   
+  Log3 $hash, 3, "Parse: Device: HX Code: $deviceCode Basedur: $footerDur";
+
   my $def = $modules{FHEMduino_FA20RF}{defptr}{$hash->{NAME} . "." . $deviceCode};
   $def = $modules{FHEMduino_FA20RF}{defptr}{$deviceCode} if(!$def);
   if(!$def) {
-    Log3 $hash, 1, "FHEMduino_FA20RF UNDEFINED sensor FA20RF detected, code $deviceCode";
-    return "UNDEFINED FA20RF_$deviceCode FHEMduino_FA20RF $deviceCode";
+    Log3 $hash, 5, "FHEMduino_FA20RF UNDEFINED sensor FA20RF detected, code $deviceCode";
+    return "UNDEFINED FA20RF_$deviceCode FHEMduino_FA20RF $deviceCode"."_".$footerDur;
   }
   
   $hash = $def;
@@ -284,17 +294,13 @@ FHEMduino_FA20RF_Parse($$)
   
   Log3 $name, 5, "FHEMduino_FA20RF: actioncode: $deviceCode";  
   
-  my $Freq;
-
-  $Freq = $a[8].$a[9].$a[10].$a[11].$a[12];
-  
+ 
   $hash->{lastReceive} = time();
-  $hash->{lastValues}{FREQ} = $Freq;
 
-  Log3 $name, 4, "FHEMduino_FA20RF: $name: $Freq:";
+  Log3 $name, 4, "FHEMduino_FA20RF: $name: $footerDur:";
 
   readingsBeginUpdate($hash);
-  readingsBulkUpdate($hash, "state", $Freq);
+  readingsBulkUpdate($hash, "state", $deviceCode);
   readingsEndUpdate($hash, 1); # Notify is done by Dispatch
 
   return $name;
@@ -333,37 +339,18 @@ hex2bin($)
 <a name="FHEMduino_FA20RF"></a>
 <h3>FHEMduino_FA20RF</h3>
 <ul>
-  The FHEMduino_FA20RF module interprets LogiLink FA20RF type of messages received by the FHEMduino.
+  The FHEMduino_FA20RF module interprets FA20RF smoke detectors an compatible types of messages received by the FHEMduino.
   <br><br>
 
   <a name="FHEMduino_FA20RFdefine"></a>
   <b>Define</b>
   <ul>
-    <code>define &lt;name&gt; FHEMduino_FA20RF &lt;code&gt;</code> <br>
-
+    <code>define &lt;name&gt; FHEMduino_FA20RF &lt;code&gt; </code> &lt;code&gt; </footerdur><br>
     <br>
-    &lt;code&gt; is the housecode of the autogenerated address of the FA20RF device and 
-	is build by the channelnumber (1 to 3) and an autogenerated address build when including
-	the battery (adress will change every time changing the battery).<br>
-  </ul>
-  <br>
+    &lt;code&gt; is the housecode of the autogenerated address of the FA20RF. This will change after pairing eith the master device.<br>
 
-  <a name="FHEMduino_FA20RFset"></a>
-  <b>Set</b> <ul>N/A</ul><br>
-
-  <a name="FHEMduino_FA20RFget"></a>
-  <b>Get</b> <ul>N/A</ul><br>
-
-  <a name="FHEMduino_FA20RFattr"></a>
-  <b>Attributes</b>
-  <ul>
-    <li><a href="#IODev">IODev (!)</a></li>
-    <li><a href="#do_not_notify">do_not_notify</a></li>
-    <li><a href="#eventMap">eventMap</a></li>
-    <li><a href="#ignore">ignore</a></li>
-    <li><a href="#model">model</a> (LogiLink FA20RF)</li>
-    <li><a href="#showtime">showtime</a></li>
-    <li><a href="#readingFnAttributes">readingFnAttributes</a></li>
+    &lt;footerdur&gt; is the duration of the footer sequence in ms. This sequnece seems to correspond with the bitsequence and will be defined
+	by the master device.<br>
   </ul>
   <br>
 </ul>
@@ -375,38 +362,22 @@ hex2bin($)
 <a name="FHEMduino_FA20RF"></a>
 <h3>FHEMduino_FA20RF</h3>
 <ul>
-  Das FHEMduino_FA20RF module dekodiert vom FHEMduino empfangene Nachrichten des LogiLink FA20RF.
+  Das FHEMduino_FA20RF module dekodiert vom FHEMduino empfangene Nachrichten von FA20RF Rauchmeldern.
   <br><br>
 
-  <a name="FHEMduino_FA20RFdefine"></a>
+  <a name="FHEMduino_FA20RF define"></a>
   <b>Define</b>
   <ul>
-    <code>define &lt;name&gt; FHEMduino_FA20RF &lt;code&gt; </code> <br>
-
+    <code>define &lt;name&gt; FHEMduino_FA20RF &lt;code&gt; </code> &lt;code&gt; </footerdur><br>
     <br>
-    &lt;code&gt; ist der automatisch angelegte Hauscode des FA20RF. Dieser ändern sich nach
+    &lt;code&gt; ist der automatisch angelegte Hauscode des FA20RF. Dieser Ã¤ndern sich nach
 	dem Pairing mit einem Master.<br>
+
+    &lt;footerdur&gt; ist die Dauer der Abschlusssequenz in ms. Die Sequenz scheint in direktem Zusammenhang zur Bitfolge zu stehen und
+	wird vom Master vorgeben<br>
   </ul>
   <br>
 
-  <a name="FHEMduino_FA20RFset"></a>
-  <b>Set</b> <ul>N/A</ul><br>
-
-  <a name="FHEMduino_FA20RFget"></a>
-  <b>Get</b> <ul>N/A</ul><br>
-
-  <a name="FHEMduino_FA20RFattr"></a>
-  <b>Attributes</b>
-  <ul>
-    <li><a href="#IODev">IODev (!)</a></li>
-    <li><a href="#do_not_notify">do_not_notify</a></li>
-    <li><a href="#eventMap">eventMap</a></li>
-    <li><a href="#ignore">ignore</a></li>
-    <li><a href="#model">model</a> (LogiLink FA20RF)</li>
-    <li><a href="#showtime">showtime</a></li>
-    <li><a href="#readingFnAttributes">readingFnAttributes</a></li>
-  </ul>
-  <br>
 </ul>
 
 =end html_DE
