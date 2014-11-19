@@ -1,5 +1,6 @@
 ##############################################
-# $Id: 14_FHEMduino_Env.pm 3818 2014-06-13 $
+# $Id: 14_FHEMduino_Env.pm 0001 2014-11-19 15:50:00Z jowiemann $
+
 package main;
 
 use strict;
@@ -340,11 +341,11 @@ FHEMduino_Env_Parse($$)
   my ($af, $td);
   if ($hum >= 0) {
     $hash->{lastValues}{humidity} = $hum;
-    # TD = Taupunkttemperatur in °C 
+    # TD = Taupunkttemperatur in Â°C 
     # AF = absolute Feuchte in g Wasserdampf pro m3 Luft
     ($af, $td) = af_td($temp, $hum);
     $hash->{lastValues}{taupunkttemp} = $td;
-    $hash->{lastValues}{abshum} = $af;
+    $hash->{lastValues}{abshumidity} = $af;
   }
   $def->{lastMSG} = $msg;
   $def->{bitMSG} = $bitsequence;
@@ -357,7 +358,7 @@ FHEMduino_Env_Parse($$)
   if ($hum >= 0) {
     readingsBulkUpdate($hash, "humidity", $hum);
     readingsBulkUpdate($hash, "taupunkttemp", $td);
-    readingsBulkUpdate($hash, "abshum", $af);
+    readingsBulkUpdate($hash, "abshumidity", $af);
   }
   if ($bat ne "") {
     readingsBulkUpdate($hash, "battery", $bat);
@@ -395,16 +396,16 @@ af_td ($$)
 # Formeln von http://www.wettermail.de/wetter/feuchte.html
 
 # r = relative Luftfeuchte
-# T = Temperatur in °C
+# T = Temperatur in Â°C
 
 my ($T, $rh) = @_;
 
-# a = 7.5, b = 237.3 für T >= 0
-# a = 9.5, b = 265.5 für T < 0 über Eis (Frostpunkt)  
+# a = 7.5, b = 237.3 fÃ¼r T >= 0
+# a = 9.5, b = 265.5 fÃ¼r T < 0 Ã¼ber Eis (Frostpunkt)  
         my $a = ($T > 0) ? 7.5 : 9.5;
         my $b = ($T > 0) ? 237.3 : 265.5;
 
-# SDD = Sättigungsdampfdruck in hPa  
+# SDD = SÃ¤ttigungsdampfdruck in hPa  
 # SDD(T) = 6.1078 * 10^((a*T)/(b+T))
   my $SDD = 6.1078 * 10**(($a*$T)/($b+$T));
 # DD = Dampfdruck in hPa
@@ -422,7 +423,7 @@ my ($T, $rh) = @_;
   my $TD  = $b*$v/($a-$v);
   my $td  = sprintf( "%.1f",$TD); # Auf eine Nachkommastelle runden
 
-# TD = Taupunkttemperatur in °C 
+# TD = Taupunkttemperatur in Â°C 
 # AF = absolute Feuchte in g Wasserdampf pro m3 Luft 
   return($af, $td);
   
@@ -474,10 +475,10 @@ binflip($)
 <a name="FHEMduino_Env"></a>
 <h3>FHEMduino_Env</h3>
 <ul>
-  The FHEMduino_Env module interprets LogiLink Env type of messages received by the FHEMduino.
+  The FHEMduino_Env module interprets environment devices messages, like weather sensors, received by the FHEMduino.
   <br><br>
 
-  <a name="FHEMduino_Envdefine"></a>
+  <a name="FHEMduino_Env define"></a>
   <b>Define</b>
   <ul>
     <code>define &lt;name&gt; FHEMduino_Env &lt;code&gt; [minsecs] [equalmsg]</code> <br>
@@ -495,25 +496,6 @@ binflip($)
 	when the msg content has changed.
   </ul>
   <br>
-
-  <a name="FHEMduino_Envset"></a>
-  <b>Set</b> <ul>N/A</ul><br>
-
-  <a name="FHEMduino_Envget"></a>
-  <b>Get</b> <ul>N/A</ul><br>
-
-  <a name="FHEMduino_Envattr"></a>
-  <b>Attributes</b>
-  <ul>
-    <li><a href="#IODev">IODev (!)</a></li>
-    <li><a href="#do_not_notify">do_not_notify</a></li>
-    <li><a href="#eventMap">eventMap</a></li>
-    <li><a href="#ignore">ignore</a></li>
-    <li><a href="#model">model</a> (LogiLink Env)</li>
-    <li><a href="#showtime">showtime</a></li>
-    <li><a href="#readingFnAttributes">readingFnAttributes</a></li>
-  </ul>
-  <br>
 </ul>
 
 =end html
@@ -523,7 +505,7 @@ binflip($)
 <a name="FHEMduino_Env"></a>
 <h3>FHEMduino_Env</h3>
 <ul>
-  Das FHEMduino_Env module dekodiert vom FHEMduino empfangene Nachrichten des LogiLink Env.
+  Das FHEMduino_Env module dekodiert vom FHEMduino empfangene Nachrichten von Environment Sensoren (z.B. Wettersensoren).
   <br><br>
 
   <a name="FHEMduino_Envdefine"></a>
@@ -533,36 +515,17 @@ binflip($)
 
     <br>
     &lt;code&gt; ist der automatisch angelegte Hauscode des Env und besteht aus der
-	Kanalnummer (1..3) und einer Zufallsadresse, die durch das Gerät beim einlegen der
-	Batterie generiert wird (Die Adresse ändert sich bei jedem Batteriewechsel).<br>
-    minsecs definert die Sekunden die mindesten vergangen sein müssen bis ein neuer
+	Kanalnummer (1..3) und einer Zufallsadresse, die durch das GerÃ¤t beim einlegen der
+	Batterie generiert wird (Die Adresse Ã¤ndert sich bei jedem Batteriewechsel).<br>
+    minsecs definert die Sekunden die mindesten vergangen sein mÃ¼ssen bis ein neuer
 	Logeintrag oder eine neue Nachricht generiert werden.
     <br>
-	Z.B. wenn 300, werden Einträge nur alle 5 Minuten erzeugt, auch wenn das Device
-    alle paar Sekunden eine Nachricht generiert. (Reduziert die Log-Dateigröße und die Zeit
-	die zur Anzeige von Plots benötigt wird.)<br>
-	equalmsg gesetzt auf 1 legt fest, dass Einträge auch dann erzeugt werden wenn die durch
-	minsecs vorgegebene Zeit noch nicht verstrichen ist, sich aber der Nachrichteninhalt geändert
+	Z.B. wenn 300, werden EintrÃ¤ge nur alle 5 Minuten erzeugt, auch wenn das Device
+    alle paar Sekunden eine Nachricht generiert. (Reduziert die Log-DateigrÃ¶ÃŸe und die Zeit
+	die zur Anzeige von Plots benÃ¶tigt wird.)<br>
+	equalmsg gesetzt auf 1 legt fest, dass EintrÃ¤ge auch dann erzeugt werden wenn die durch
+	minsecs vorgegebene Zeit noch nicht verstrichen ist, sich aber der Nachrichteninhalt geÃ¤ndert
 	hat.
-  </ul>
-  <br>
-
-  <a name="FHEMduino_Envset"></a>
-  <b>Set</b> <ul>N/A</ul><br>
-
-  <a name="FHEMduino_Envget"></a>
-  <b>Get</b> <ul>N/A</ul><br>
-
-  <a name="FHEMduino_Envattr"></a>
-  <b>Attributes</b>
-  <ul>
-    <li><a href="#IODev">IODev (!)</a></li>
-    <li><a href="#do_not_notify">do_not_notify</a></li>
-    <li><a href="#eventMap">eventMap</a></li>
-    <li><a href="#ignore">ignore</a></li>
-    <li><a href="#model">model</a> (LogiLink Env)</li>
-    <li><a href="#showtime">showtime</a></li>
-    <li><a href="#readingFnAttributes">readingFnAttributes</a></li>
   </ul>
   <br>
 </ul>
