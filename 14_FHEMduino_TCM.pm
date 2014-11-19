@@ -1,5 +1,5 @@
 ##############################################
-# $Id: 14_FHEMduino_TCM.pm 3818 2014-06-24 $
+# $Id: 14_FHEMduino_TCM.pm 0001 2014-11-19 15:50:00Z jowiemann $
 package main;
 
 use strict;
@@ -60,7 +60,7 @@ FHEMduino_TCM_Do_On_Till($@)
   my $hms_till = sprintf("%02d:%02d:%02d", $hr, $min, $sec);
   my $hms_now = sprintf("%02d:%02d:%02d", $lt[2], $lt[1], $lt[0]);
   if($hms_now ge $hms_till) {
-    Log 4, "on-till: won't switch as now ($hms_now) is later than $hms_till";
+    Log3 $hash, 4, "on-till: won't switch as now ($hms_now) is later than $hms_till";
     return "";
   }
 
@@ -87,7 +87,7 @@ FHEMduino_TCM_On_For_Timer($@)
   my $hms_now = sprintf("%02d:%02d:%02d", $lt[2], $lt[1], $lt[0]);
   
   if($hms_now ge $hms_till) {
-    Log 4, "on-for-timer: won't switch as now ($hms_now) is later than $hms_till";
+    Log3 $hash, 4, "on-for-timer: won't switch as now ($hms_now) is later than $hms_till";
     return "";
   }
 
@@ -111,12 +111,12 @@ FHEMduino_TCM_Define($$)
 
   my $name = $a[0];
   my $TCMcode = $a[2];
-  my $code = lc($TCMcode); 
-  my $onTCM = "";
+  my $code = hex2bin(lc($TCMcode)); 
+  my $onTCM = lc($TCMcode);
 
   if(int(@a) == 3) {
   }
-  elsif(int(@a) == 5) {
+  elsif(int(@a) == 4) {
     $onTCM = $a[3];
   }
   else {
@@ -127,13 +127,13 @@ FHEMduino_TCM_Define($$)
 
   $hash->{CODE} = $TCMcode;
   $hash->{DEF} = $TCMcode . " " . $onTCM;
-  $hash->{XMIT} = hex2bin($code);
-  $hash->{BTN}  = hex2bin($code);
+  $hash->{XMIT} = $code;
+  $hash->{BTN}  = $code;
   
   Log3 $hash, 5, "Define hascode: {$code} {$name}";
   $modules{FHEMduino_TCM}{defptr}{$TCMcode} = $hash;
-  $hash->{$elro_c2b{"on"}}  = hex2bin($code);
-  $hash->{$elro_c2b{"off"}}  = hex2bin($code);
+  $hash->{$elro_c2b{"on"}}  = $code;
+  $hash->{$elro_c2b{"off"}}  = $code;
   $modules{FHEMduino_TCM}{defptr}{$code}{$name} = $hash;
 
   if(!defined $hash->{IODev} ||!defined $hash->{IODev}{NAME}){
@@ -202,9 +202,9 @@ sub FHEMduino_TCM_Set($@){ #####################################################
   	$message = "dr".$attr{$a[0]}{"TCMrepetition"};
     $msg = CallFn($io->{NAME}, "GetFn", $io, (" ", "raw", $message));
     if ($msg =~ m/raw => $message/) {
- 	  Log GetLogLevel($a[0],4), "FHEMduino_TCM: Set TCMrepetition: $message for $io->{NAME}";
+ 	  Log3 $hash, 4, "FHEMduino_TCM: Set TCMrepetition: $message for $io->{NAME}";
     } else {
- 	  Log GetLogLevel($a[0],4), "FHEMduino_TCM: Error set TCMrepetition: $message for $io->{NAME}";
+ 	  Log3 $hash, 4, "FHEMduino_TCM: Error set TCMrepetition: $message for $io->{NAME}";
     }
   }
 
@@ -212,7 +212,7 @@ sub FHEMduino_TCM_Set($@){ #####################################################
   $message = "ds".$hash->{XMIT};
 
   ## Log that we are going to switch InterTechno
-  Log GetLogLevel($a[0],2), "FHEMduino_TCM set $v";
+  Log3 $hash, 3, "FHEMduino_TCM set $v";
   (undef, $v) = split(" ", $v, 2);	# Not interested in the name...
 
   ## Send Message to IODev and wait for correct answer
@@ -229,25 +229,27 @@ sub FHEMduino_TCM_Set($@){ #####################################################
   	$message = "dr".$TCM_defrepetition;
     $msg = CallFn($io->{NAME}, "GetFn", $io, (" ", "raw", $message));
     if ($msg =~ m/raw => $message/) {
- 	  Log GetLogLevel($a[0],4), "FHEMduino_TCM: Set TCMrepetition back: $message for $io->{NAME}";
+ 	  Log3 $hash, 4, "FHEMduino_TCM: Set TCMrepetition back: $message for $io->{NAME}";
     } else {
- 	  Log GetLogLevel($a[0],4), "FHEMduino_TCM: Error TCMrepetition back: $message for $io->{NAME}";
+ 	  Log3 $hash, 4, "FHEMduino_TCM: Error TCMrepetition back: $message for $io->{NAME}";
     }
   }
 
+  ##########################
   # Look for all devices with the same code, and set state, timestamp
-  $name = "$hash->{NAME}";
-  my $code = "$hash->{XMIT}";
+  my $code = $hash->{XMIT};
   my $tn = TimeNow();
 
-  foreach my $n (keys %{ $modules{FHEMduino_TCM}{defptr}{$code} }) {
-    my $lh = $modules{FHEMduino_TCM}{defptr}{$code}{$n};
-    $lh->{CHANGED}[0] = $v;
-    $lh->{STATE} = $v;
-    $lh->{READINGS}{state}{TIME} = $tn;
-    $lh->{READINGS}{state}{VAL} = $v;
-    $modules{FHEMduino_TCM}{defptr}{$code}{$name}  = $hash;
+  $name = "$hash->{NAME}";
+  Log3 $hash, 5, "$name: RSU: $code";
+
+  my $defptr = $modules{FHEMduino_TCM}{defptr}{$code};
+
+  foreach my $n (keys %{ $defptr }) {
+    Log3 $hash, 5, "$name: RSU->: $n";
+    readingsSingleUpdate($defptr->{$n}, "state", $v, 1);
   }
+
   return $ret;
 }
 
@@ -318,39 +320,19 @@ hex2bin($)
 <a name="FHEMduino_TCM"></a>
 <h3>FHEMduino_TCM</h3>
 <ul>
-  The FHEMduino_TCM module interprets LogiLink TCM type of messages received by the FHEMduino.
+  The FHEMduino_TCM module interprets Tchibo TCM doorbell messages received by the FHEMduino.
   <br><br>
 
-  <a name="FHEMduino_TCMdefine"></a>
+  <a name="FHEMduino_TCM define"></a>
   <b>Define</b>
   <ul>
     <code>define &lt;name&gt; FHEMduino_TCM &lt;code&gt;</code> <br>
 
     <br>
-    &lt;code&gt; is the housecode of the autogenerated address of the TCM device and 
-	is build by the channelnumber (1 to 3) and an autogenerated address build when including
-	the battery (adress will change every time changing the battery).<br>
+    &lt;code&gt; is the housecode of the autogenerated address of the TCM.<br>
   </ul>
   <br>
 
-  <a name="FHEMduino_TCMset"></a>
-  <b>Set</b> <ul>N/A</ul><br>
-
-  <a name="FHEMduino_TCMget"></a>
-  <b>Get</b> <ul>N/A</ul><br>
-
-  <a name="FHEMduino_TCMattr"></a>
-  <b>Attributes</b>
-  <ul>
-    <li><a href="#IODev">IODev (!)</a></li>
-    <li><a href="#do_not_notify">do_not_notify</a></li>
-    <li><a href="#eventMap">eventMap</a></li>
-    <li><a href="#ignore">ignore</a></li>
-    <li><a href="#model">model</a> (LogiLink TCM)</li>
-    <li><a href="#showtime">showtime</a></li>
-    <li><a href="#readingFnAttributes">readingFnAttributes</a></li>
-  </ul>
-  <br>
 </ul>
 
 =end html
@@ -360,38 +342,19 @@ hex2bin($)
 <a name="FHEMduino_TCM"></a>
 <h3>FHEMduino_TCM</h3>
 <ul>
-  Das FHEMduino_TCM module dekodiert vom FHEMduino empfangene Nachrichten des LogiLink TCM.
+  Das FHEMduino_TCM module dekodiert vom FHEMduino empfangene Nachrichten des Tchibo TCM TÃ¼rgongs.
   <br><br>
 
-  <a name="FHEMduino_TCMdefine"></a>
+  <a name="FHEMduino_TCM define"></a>
   <b>Define</b>
   <ul>
     <code>define &lt;name&gt; FHEMduino_TCM &lt;code&gt; </code> <br>
 
     <br>
-    &lt;code&gt; ist der automatisch angelegte Hauscode des TCM. Dieser ändern sich nach
-	dem Pairing mit einem Master.<br>
+    &lt;code&gt; ist der automatisch angelegte Hauscode des TCM.<br>
   </ul>
   <br>
 
-  <a name="FHEMduino_TCMset"></a>
-  <b>Set</b> <ul>N/A</ul><br>
-
-  <a name="FHEMduino_TCMget"></a>
-  <b>Get</b> <ul>N/A</ul><br>
-
-  <a name="FHEMduino_TCMattr"></a>
-  <b>Attributes</b>
-  <ul>
-    <li><a href="#IODev">IODev (!)</a></li>
-    <li><a href="#do_not_notify">do_not_notify</a></li>
-    <li><a href="#eventMap">eventMap</a></li>
-    <li><a href="#ignore">ignore</a></li>
-    <li><a href="#model">model</a> (LogiLink TCM)</li>
-    <li><a href="#showtime">showtime</a></li>
-    <li><a href="#readingFnAttributes">readingFnAttributes</a></li>
-  </ul>
-  <br>
 </ul>
 
 =end html_DE
