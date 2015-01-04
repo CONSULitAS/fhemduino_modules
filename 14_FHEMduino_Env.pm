@@ -107,35 +107,53 @@ FHEMduino_Env_Parse($$)
   my $deviceCode;
   my $SensorTyp;
   my $val = "";
-  my ($channel, $tmp, $temp, $hum, $bat, $sendMode, $trend);
+  my ($channel, $trendBinary, $temp, $hum, $battery, $sendMode, $trend);
 
   if ($model eq "01") {			# KW9010
-  # Re: Tchibo Wetterstation 433 MHz - Dekodierung mal ganz einfach 
-  # See also http://forum.arduino.cc/index.php?PHPSESSID=ffoeoe9qeuv7rf4fh0d637hd74&topic=136836.msg1536416#msg1536416
-  #                 /------------------------------------- Random ID part one      
-  #                /    / -------------------------------- Channel switch       
-  #               /    /  /------------------------------- Random ID part two      
-  #              /    /  /  / ---------------------------- Battery state 0 == Ok      
-  #             /    /  /  / / --------------------------- Trend (continous, rising, falling      
-  #            /    /  /  / /  / ------------------------- forced send      
-  #           /    /  /  / /  /  / ----------------------- Temperature
-  #          /    /  /  / /  /  /          /-------------- Temperature sign bit. if 1 then temp = temp - 4096
-  #         /    /  /  / /  /  /          /  /------------ Humidity
-  #        /    /  /  / /  /  /          /  /       /----- Checksum
-  #       0110 00 10 1 00 1  000000100011  00001101 1101
-  #       0110 01 00 0 10 1  100110001001  00001011 0101
-  # Bit   0    4  6  8 9  11 12            24       32
+    # Re: Tchibo Wetterstation 433 MHz - Dekodierung mal ganz einfach 
+    # See also http://forum.arduino.cc/index.php?PHPSESSID=ffoeoe9qeuv7rf4fh0d637hd74&topic=136836.msg1536416#msg1536416
+    #                 /------------------------------------- Random ID part one      
+    #                /    / -------------------------------- Channel switch       
+    #               /    /  /------------------------------- Random ID part two      
+    #              /    /  /  / ---------------------------- Battery state 0 == Ok      
+    #             /    /  /  / / --------------------------- Trend (continous, rising, falling      
+    #            /    /  /  / /  / ------------------------- forced send      
+    #           /    /  /  / /  /  / ----------------------- Temperature
+    #          /    /  /  / /  /  /          /-------------- Temperature sign bit. if 1 then temp = temp - 4096
+    #         /    /  /  / /  /  /          /  /------------ Humidity
+    #        /    /  /  / /  /  /          /  /       /----- Checksum
+    #       0110 00 10 1 00 1  000000100011  00001101 1101
+    #       0110 01 00 0 10 1  100110001001  00001011 0101
+    # Bit   0    4  6  8 9  11 12            24       32
     $SensorTyp = "KW9010";
-    $channel = bin2dec(substr($bitsequence,4,2));
-    $bin = substr($bitsequence,0,4).substr($bitsequence,6,2);
-    $deviceCode = sprintf('%X', oct("0b$bin"));
-    $bat = int(substr($bitsequence,8,1)) eq "0" ? "ok" : "critical";
-    $tmp = bin2dec(substr($bitsequence,9,2));
-    if (int($tmp) == 1)
+
+    # Calculate checksum
+    my $checksum = oct("0b" . binflip(substr($bitsequence,32,4)));
+
+    my $calculatedChecksum = 0;
+    for (my $i = 0 ; $i <= 7 ; $i++) {
+      $calculatedChecksum += oct("0b" . binflip(substr($bitsequence,$i * 4,4)));
+    }
+    $calculatedChecksum &= 0xF;
+
+    if ($checksum != $calculatedChecksum) {
+      Log3 "FHEMduino", 4, "FHEMduino_Env: Checksum Failed -> $msg";
+      return "";
+    }
+    # Get Device Identification
+    $channel = oct("0b" . substr($bitsequence,4,2));
+    $deviceCode = sprintf('%02X', oct("0b".substr($bitsequence,0,4).substr($bitsequence,6,2)));
+
+    # Reading Battery
+    $battery = int(substr($bitsequence,8,1)) eq "0" ? "ok" : "critical";
+
+    # Reading Trend
+    $trendBinary = oct("0b".substr($bitsequence,9,2));
+    if ($trendBinary == 1)
     {
       $trend = "rising";
     }
-    elsif (int($tmp) == 2)
+    elsif ($trendBinary == 2)
     {
       $trend = "falling";
     }
@@ -143,14 +161,22 @@ FHEMduino_Env_Parse($$)
     {
       $trend = "stable";
     }
+
+    #Reading SendMode
     $sendMode = int(substr($bitsequence,11,1)) eq "0" ? "automatic" : "manual";
-    $temp = bin2dec(binflip(substr($bitsequence,12,12)));
+
+    # Reading Temperature
+    $temp = oct("0b" . binflip(substr($bitsequence,12,12)));
     if (substr($bitsequence,23,1) eq "1") {
-      $temp = $temp - 2048
+      $temp = $temp - 4096
     }
     $temp = $temp / 10.0;
-    $hum = bin2dec(binflip(substr($bitsequence,24,8))) - 156;
-    $val = "T: $temp H: $hum B: $bat";
+
+    # Reading Humidity
+    $hum = oct("0b" . binflip(substr($bitsequence,24,8))) - 156;
+
+    # Put together value
+    $val = "T: $temp H: $hum B: $battery";
   }
   elsif ($model eq "02") {      # EuroChron / Tchibo
   #                /--------------------------- Channel, changes after every battery change      
@@ -167,7 +193,7 @@ FHEMduino_Env_Parse($$)
     $channel = "";
     $bin = substr($bitsequence,0,8);
     $deviceCode = sprintf('%X', oct("0b$bin"));
-    $bat = int(substr($bitsequence,8,1)) eq "0" ? "ok" : "critical";
+    $battery = int(substr($bitsequence,8,1)) eq "0" ? "ok" : "critical";
     $trend = "";
     $sendMode = int(substr($bitsequence,11,1)) eq "0" ? "automatic" : "manual";
     $temp = bin2dec(substr($bitsequence,25,11));
@@ -176,7 +202,7 @@ FHEMduino_Env_Parse($$)
     }
     $temp = $temp / 10.0;
     $hum = bin2dec(substr($bitsequence,17,7));
-    $val = "T: $temp H: $hum B: $bat";
+    $val = "T: $temp H: $hum B: $battery";
   }
   elsif ($model eq "03") {      # PEARL NC7159, LogiLink WS0002
   #                 /--------------------------------- Sensdortype      
@@ -194,7 +220,7 @@ FHEMduino_Env_Parse($$)
     $channel = bin2dec(substr($bitsequence,14,2));
     $bin = substr($bitsequence,4,8);
     $deviceCode = sprintf('%X', oct("0b$bin"));
-    $bat = int(substr($bitsequence,12,1)) eq "1" ? "ok" : "critical";
+    $battery = int(substr($bitsequence,12,1)) eq "1" ? "ok" : "critical";
     $trend = "";
     $sendMode = int(substr($bitsequence,13,1)) eq "0" ? "automatic" : "manual";
     $temp = bin2dec(substr($bitsequence,17,11));
@@ -203,7 +229,7 @@ FHEMduino_Env_Parse($$)
     }
     $temp = $temp / 10.0;
     $hum = bin2dec(substr($bitsequence,29,7));
-    $val = "T: $temp H: $hum B: $bat";
+    $val = "T: $temp H: $hum B: $battery";
    }
   elsif ($model eq "04") {      # Lifetec
     $SensorTyp = "Lifetec";
@@ -211,7 +237,7 @@ FHEMduino_Env_Parse($$)
     $channel = "";
     $bin = substr($bitsequence,0,8);
     $deviceCode = sprintf('%X', oct("0b$bin"));
-    $bat = int(substr($bitsequence,16,1)) eq "1" ? "ok" : "critical";
+    $battery = int(substr($bitsequence,16,1)) eq "1" ? "ok" : "critical";
     $trend = "";
     $sendMode = int(substr($bitsequence,17,1)) eq "0" ? "automatic" : "manual";
     $temp = bin2dec(substr($bitsequence,9,7));
@@ -220,14 +246,14 @@ FHEMduino_Env_Parse($$)
       $temp = $temp * (-1);
     }
     $hum = (-1);
-    $val = "T: $temp H: $hum B: $bat";
+    $val = "T: $temp H: $hum B: $battery";
   }
   elsif ($model eq "05") {      # TX70DTH (Aldi)
     $SensorTyp = "TX70DTH";
     $channel = bin2dec(substr($bitsequence,9,3));
     $bin = substr($bitsequence,0,8);
     $deviceCode = sprintf('%X', oct("0b$bin"));
-    $bat = int(substr($bitsequence,8,1)) eq "1" ? "ok" : "critical";
+    $battery = int(substr($bitsequence,8,1)) eq "1" ? "ok" : "critical";
     $trend = "";
     $sendMode = "";
     $temp = bin2dec(substr($bitsequence,16,8));
@@ -235,7 +261,7 @@ FHEMduino_Env_Parse($$)
       $temp = $temp - 1024;
     }
     $hum = bin2dec(substr($bitsequence,29,7));
-    $val = "T: $temp H: $hum B: $bat";
+    $val = "T: $temp H: $hum B: $battery";
   }
   elsif ($model eq "06") {      # AURIOL (Lidl Version: 09/2013)
   #                /--------------------------------- Channel, changes after every battery change      
@@ -260,13 +286,13 @@ FHEMduino_Env_Parse($$)
     $channel = "0";
     $bin = substr($bitsequence,0,8);
     $deviceCode = sprintf('%X', oct("0b$bin"));
-    $bat = int(substr($bitsequence,8,1)) eq "1" ? "ok" : "critical";
-    $tmp = bin2dec(substr($bitsequence,30,2));
-    if (int($tmp) == 2)
+    $battery = int(substr($bitsequence,8,1)) eq "1" ? "ok" : "critical";
+    $trendBinary = bin2dec(substr($bitsequence,30,2));
+    if (int($trendBinary) == 2)
     {
       $trend = "rising";
     }
-    elsif (int($tmp) == 1)
+    elsif (int($trendBinary) == 1)
     {
       $trend = "falling";
     }
@@ -281,7 +307,7 @@ FHEMduino_Env_Parse($$)
     }
     $temp = $temp / 10.0;
     $hum = (-1);
-    $val = "T: $temp H: $hum B: $bat";
+    $val = "T: $temp H: $hum B: $battery";
   }
   else {
     Log3 $hash, 1, "FHEMduino_Env unknown model: $model";
@@ -360,8 +386,8 @@ FHEMduino_Env_Parse($$)
     readingsBulkUpdate($hash, "taupunkttemp", $td);
     readingsBulkUpdate($hash, "abshumidity", $af);
   }
-  if ($bat ne "") {
-    readingsBulkUpdate($hash, "battery", $bat);
+  if ($battery ne "") {
+    readingsBulkUpdate($hash, "battery", $battery);
   }
   if ($trend ne "") {
     readingsBulkUpdate($hash, "trend", $trend);
